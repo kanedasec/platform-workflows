@@ -1,4 +1,4 @@
-name: Reusable differential security
+name: Reusable differential security scanners
 
 on:
   workflow_call:
@@ -73,7 +73,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Scan pull request commits
-        uses: kanedasec/platform-workflows/actions/gitleaks-scan@bc708f7a99aa11f1e64fb38edab9a43db68d742b
+        uses: kanedasec/platform-workflows/actions/gitleaks-scan@04444a7deafa432e6c46a05a1728d53a82baaef3
         with:
           base_sha: ${{ github.event.pull_request.base.sha }}
           head_sha: ${{ github.event.pull_request.head.sha }}
@@ -154,7 +154,7 @@ jobs:
             .
 
       - name: Create differential Trivy report
-        uses: kanedasec/platform-workflows/actions/trivy-diff@bc708f7a99aa11f1e64fb38edab9a43db68d742b
+        uses: kanedasec/platform-workflows/actions/trivy-diff@04444a7deafa432e6c46a05a1728d53a82baaef3
         with:
           base_report: ${{ runner.temp }}/security-reports/trivy-base.json
           head_report: ${{ runner.temp }}/security-reports/trivy-head.json
@@ -166,60 +166,5 @@ jobs:
         with:
           name: trivy-report
           path: ${{ runner.temp }}/security-reports/trivy-delta.json
-          if-no-files-found: warn
-          retention-days: 7
-
-  policy-gate:
-    name: Security policy (SGP Manager)
-    needs:
-      - sast
-      - secrets
-      - sca
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    environment:
-      name: security-policy
-
-    permissions:
-      actions: read
-      contents: read
-
-    steps:
-      - name: Download Semgrep report
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: semgrep-report
-          path: ${{ runner.temp }}/security-reports
-
-      - name: Download Gitleaks report
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: gitleaks-report
-          path: ${{ runner.temp }}/security-reports
-
-      - name: Download Trivy report
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: trivy-report
-          path: ${{ runner.temp }}/security-reports
-
-      - name: Apply SGP Manager gate policies
-        uses: kanedasec/platform-workflows/actions/sgp-policy-gate@bc708f7a99aa11f1e64fb38edab9a43db68d742b
-        env:
-          SGP_MANAGER_API_KEY: ${{ secrets.SGP_MANAGER_API_KEY }}
-        with:
-          manager_url: https://sgp.kanedasec.com.br
-          application: ${{ github.event.repository.name }}
-          semgrep_report: ${{ runner.temp }}/security-reports/semgrep.json
-          gitleaks_report: ${{ runner.temp }}/security-reports/gitleaks.json
-          trivy_report: ${{ runner.temp }}/security-reports/trivy-delta.json
-          decision_directory: ${{ runner.temp }}/policy-decisions
-
-      - name: Upload SGP Manager decisions
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: sgp-policy-decisions
-          path: ${{ runner.temp }}/policy-decisions/*.json
           if-no-files-found: warn
           retention-days: 7

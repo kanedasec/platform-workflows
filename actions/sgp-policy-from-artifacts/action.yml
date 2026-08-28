@@ -1,0 +1,44 @@
+name: SGP Manager policy from scanner artifacts
+description: Download standardized scanner reports and apply SGP Manager policies.
+
+runs:
+  using: composite
+  steps:
+    - name: Download Semgrep report
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: semgrep-report
+        path: ${{ runner.temp }}/security-reports
+
+    - name: Download Gitleaks report
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: gitleaks-report
+        path: ${{ runner.temp }}/security-reports
+
+    - name: Download Trivy report
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: trivy-report
+        path: ${{ runner.temp }}/security-reports
+
+    - name: Apply SGP Manager gate policies
+      uses: kanedasec/platform-workflows/actions/sgp-policy-gate@04444a7deafa432e6c46a05a1728d53a82baaef3
+      env:
+        SGP_MANAGER_API_KEY: ${{ env.SGP_MANAGER_API_KEY }}
+      with:
+        manager_url: https://sgp.kanedasec.com.br
+        application: ${{ github.event.repository.name }}
+        semgrep_report: ${{ runner.temp }}/security-reports/semgrep.json
+        gitleaks_report: ${{ runner.temp }}/security-reports/gitleaks.json
+        trivy_report: ${{ runner.temp }}/security-reports/trivy-delta.json
+        decision_directory: ${{ runner.temp }}/policy-decisions
+
+    - name: Upload SGP Manager decisions
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: sgp-policy-decisions
+        path: ${{ runner.temp }}/policy-decisions/*.json
+        if-no-files-found: warn
+        retention-days: 7
