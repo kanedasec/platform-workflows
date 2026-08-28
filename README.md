@@ -12,6 +12,8 @@ small caller workflows and application-specific build metadata.
 - Application workflows call released revisions by a full Git commit SHA.
 - Third-party GitHub Actions are pinned to full commit SHAs.
 - Scanner steps produce evidence; SGP Manager decides which severities block.
+- Secret-scan exceptions are centrally reviewed; caller-controlled
+  `.gitleaksignore` files and inline `gitleaks:allow` comments are ignored.
 - The SGP API key remains in each caller repository's protected
   `security-policy` environment. GitHub does not automatically expose secrets
   stored in this repository to callers.
