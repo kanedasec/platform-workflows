@@ -1,0 +1,183 @@
+name: Reusable CI - Python and Node.js
+
+on:
+  workflow_call:
+    inputs:
+      python_enabled:
+        description: Run the Python test job
+        required: false
+        type: boolean
+        default: true
+      python_version:
+        description: Python version used for tests
+        required: false
+        type: string
+        default: "3.12"
+      python_working_directory:
+        description: Directory containing the Python application
+        required: false
+        type: string
+        default: backend
+      python_requirements_file:
+        description: Requirements file relative to the Python working directory
+        required: false
+        type: string
+        default: requirements-dev.txt
+      python_cache_dependency_path:
+        description: Dependency files used for the pip cache key
+        required: false
+        type: string
+        default: |
+          backend/requirements.txt
+          backend/requirements-dev.txt
+      python_test_path:
+        description: Pytest path relative to the Python working directory
+        required: false
+        type: string
+        default: tests
+      node_enabled:
+        description: Run the Node.js job
+        required: false
+        type: boolean
+        default: true
+      node_version:
+        description: Node.js version used for build and tests
+        required: false
+        type: string
+        default: "22"
+      node_working_directory:
+        description: Directory containing the Node.js application
+        required: false
+        type: string
+        default: frontend
+      node_lockfile:
+        description: Lockfile used for the npm cache key
+        required: false
+        type: string
+        default: frontend/package-lock.json
+      node_run_tests:
+        description: Run an npm test script before building
+        required: false
+        type: boolean
+        default: false
+      node_test_script:
+        description: npm script used when node_run_tests is enabled
+        required: false
+        type: string
+        default: test
+      node_build_script:
+        description: npm script used to build the frontend
+        required: false
+        type: string
+        default: build
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  workflow-validation:
+    name: Workflow validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+
+    steps:
+      - name: Check out caller repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint
+        run: |
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          bin_dir="$RUNNER_TEMP/bin"
+          mkdir -p "$bin_dir"
+          curl --fail --location --silent --show-error \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            --output "$archive"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$bin_dir" actionlint
+          chmod 0755 "$bin_dir/actionlint"
+          echo "$bin_dir" >> "$GITHUB_PATH"
+
+      - name: Validate caller workflows
+        run: actionlint .github/workflows/*.yaml
+
+  python-tests:
+    name: Backend tests
+    if: inputs.python_enabled
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Check out caller repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+          cache-dependency-path: ${{ inputs.python_cache_dependency_path }}
+
+      - name: Install Python dependencies
+        working-directory: ${{ inputs.python_working_directory }}
+        env:
+          REQUIREMENTS_FILE: ${{ inputs.python_requirements_file }}
+        run: python -m pip install --requirement "$REQUIREMENTS_FILE"
+
+      - name: Run Python tests
+        working-directory: ${{ inputs.python_working_directory }}
+        env:
+          TEST_PATH: ${{ inputs.python_test_path }}
+          PYTHONPATH: .
+        run: python -m pytest -q "$TEST_PATH"
+
+  node-build:
+    name: Frontend build
+    if: inputs.node_enabled
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out caller repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.node_lockfile }}
+
+      - name: Install Node.js dependencies
+        working-directory: ${{ inputs.node_working_directory }}
+        run: npm ci --no-audit --no-fund
+
+      - name: Run frontend tests
+        if: inputs.node_run_tests
+        working-directory: ${{ inputs.node_working_directory }}
+        env:
+          TEST_SCRIPT: ${{ inputs.node_test_script }}
+        run: npm run "$TEST_SCRIPT"
+
+      - name: Build frontend
+        working-directory: ${{ inputs.node_working_directory }}
+        env:
+          BUILD_SCRIPT: ${{ inputs.node_build_script }}
+        run: npm run "$BUILD_SCRIPT"

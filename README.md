@@ -27,3 +27,6 @@ the repository ruleset is enabled.
 
 Consumers must pin reusable workflows to an immutable full commit SHA. A human
 readable release tag may document a version, but tags are not the security pin.
+
+See [the application workflow contract](docs/consumer-contract.md) for caller
+examples and required repository configuration.
