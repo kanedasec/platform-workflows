@@ -1,0 +1,4 @@
+# This repository is part of the CI/CD trust boundary.
+/.github/ @kanedasec
+/actions/ @kanedasec
+/tests/ @kanedasec
