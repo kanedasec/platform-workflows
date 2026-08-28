@@ -43,6 +43,8 @@ runs:
         mkdir -p "$report_parent"
         gitleaks git \
           --config "$GITHUB_ACTION_PATH/gitleaks.toml" \
+          --gitleaks-ignore-path "$GITHUB_ACTION_PATH/gitleaks.ignore" \
+          --ignore-gitleaks-allow \
           --log-opts="${BASE_SHA}..${HEAD_SHA}" \
           --report-format json \
           --report-path "$REPORT_PATH" \
