@@ -1,0 +1,66 @@
+name: SGP Manager policy gate
+description: Normalize scanner reports and apply centralized SGP Manager blocking policy.
+
+inputs:
+  manager_url:
+    description: HTTPS base URL for SGP Manager
+    required: true
+  application:
+    description: SGP application slug
+    required: true
+  semgrep_report:
+    description: Absolute path to the differential Semgrep JSON report
+    required: true
+  gitleaks_report:
+    description: Absolute path to the differential Gitleaks JSON report
+    required: true
+  trivy_report:
+    description: Absolute path to the differential Trivy JSON report
+    required: true
+  decision_directory:
+    description: Absolute directory for policy decision JSON files
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Apply SGP Manager policies
+      shell: bash
+      env:
+        SGP_MANAGER_URL: ${{ inputs.manager_url }}
+        SGP_APPLICATION: ${{ inputs.application }}
+        SEMGREP_REPORT: ${{ inputs.semgrep_report }}
+        GITLEAKS_REPORT: ${{ inputs.gitleaks_report }}
+        TRIVY_REPORT: ${{ inputs.trivy_report }}
+        DECISION_DIRECTORY: ${{ inputs.decision_directory }}
+      run: |
+        if [[ -z "${SGP_MANAGER_API_KEY:-}" ]]; then
+          echo "SGP_MANAGER_API_KEY is not configured"
+          exit 2
+        fi
+
+        status=0
+
+        run_gate() {
+          local gate="$1"
+          local scanner="$2"
+          local report="$3"
+          local result=0
+
+          python3 "$GITHUB_ACTION_PATH/security_gate.py" \
+            --manager-url "$SGP_MANAGER_URL" \
+            --application "$SGP_APPLICATION" \
+            --gate "$gate" \
+            --scanner "$scanner" \
+            --report "$report" \
+            --decision-output "$DECISION_DIRECTORY/$gate.json" || result=$?
+
+          if (( result > status )); then
+            status=$result
+          fi
+        }
+
+        run_gate sast semgrep "$SEMGREP_REPORT"
+        run_gate secrets gitleaks "$GITLEAKS_REPORT"
+        run_gate sca trivy "$TRIVY_REPORT"
+        exit "$status"
