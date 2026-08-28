@@ -55,16 +55,34 @@ permissions:
 jobs:
   differential-security:
     uses: kanedasec/platform-workflows/.github/workflows/security-differential.yaml@WORKFLOW_COMMIT_SHA
+
+  policy-gate:
+    name: Security policy (SGP Manager)
+    needs: differential-security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: security-policy
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Apply centralized security policies
+        uses: kanedasec/platform-workflows/actions/sgp-policy-from-artifacts@WORKFLOW_COMMIT_SHA
+        env:
+          SGP_MANAGER_API_KEY: ${{ secrets.SGP_MANAGER_API_KEY }}
 ```
 
-The security workflow derives the SGP application slug from the caller
-repository name. The repository name must therefore match its application slug
-in SGP Manager.
+The scanners run without application secrets. The small caller-side policy job
+binds directly to the protected environment, then the pinned composite action
+derives the SGP application slug from the caller repository name. The repository
+name must therefore match its application slug in SGP Manager.
 
 Each caller repository must have a `security-policy` environment containing the
 shared `SGP_MANAGER_API_KEY` environment secret. The API key is not stored in
-this repository and is not passed as a workflow input. Environment approval and
-branch rules remain configured in the caller repository.
+this repository, passed as an action input, or made available to scanner jobs.
+Environment approval and branch rules remain configured in the caller
+repository.
 
 Caller-controlled `.gitleaksignore`, `.trivyignore`, `gitleaks:allow`, and
 `nosemgrep` suppressions do not weaken these scans. Exceptions should be added
