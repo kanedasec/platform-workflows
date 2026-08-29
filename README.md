@@ -19,6 +19,9 @@ small caller workflows and application-specific build metadata.
   stored in this repository to callers.
 - The application identifier is derived from the caller repository name, not
   supplied by application code.
+- Deployment credentials remain in each caller's protected environment. The
+  central deployment action uses an ephemeral, narrowly tagged Tailscale node
+  and a pinned SSH host key to invoke one forced server-side command.
 
 Changes to `.github/`, `actions/`, and `tests/` require code-owner review once
 the repository ruleset is enabled.
@@ -33,3 +36,6 @@ examples and required repository configuration.
 
 See [the container publishing contract](docs/container-publishing.md) for GHCR
 image naming, permissions, and tagging conventions.
+
+See [the Tailscale SSH deployment contract](docs/deployment.md) for protected
+environment configuration and the restricted deployment caller.
