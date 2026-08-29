@@ -30,3 +30,6 @@ readable release tag may document a version, but tags are not the security pin.
 
 See [the application workflow contract](docs/consumer-contract.md) for caller
 examples and required repository configuration.
+
+See [the container publishing contract](docs/container-publishing.md) for GHCR
+image naming, permissions, and tagging conventions.
