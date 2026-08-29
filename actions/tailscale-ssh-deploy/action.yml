@@ -1,0 +1,200 @@
+name: Tailscale SSH deployment
+description: Deploy an immutable image tag through ephemeral Tailscale and restricted SSH.
+
+inputs:
+  oauth_client_id:
+    description: Tailscale OAuth client ID restricted to tag:github-deploy
+    required: true
+  oauth_secret:
+    description: Tailscale OAuth client secret restricted to auth key creation
+    required: true
+  ssh_private_key:
+    description: Private key accepted by the restricted VPS deployer identity
+    required: true
+  target_host:
+    description: Tailscale IPv4 address of the deployment target
+    required: true
+  target_user:
+    description: Restricted SSH deployment user
+    required: true
+  known_hosts:
+    description: Pinned SSH known_hosts entry for the deployment target
+    required: true
+  deploy_command:
+    description: Forced deployment command name accepted by SSH
+    required: true
+  image_tag:
+    description: Immutable sha-<40-character-commit-sha> image tag
+    required: true
+  public_url:
+    description: Public HTTPS application origin used for smoke testing
+    required: true
+  readiness_path:
+    description: Public readiness path appended to public_url
+    required: false
+    default: /ready
+
+runs:
+  using: composite
+  steps:
+    - name: Validate deployment configuration
+      shell: bash
+      env:
+        PYTHONDONTWRITEBYTECODE: "1"
+        TARGET_HOST: ${{ inputs.target_host }}
+        TARGET_USER: ${{ inputs.target_user }}
+        DEPLOY_COMMAND: ${{ inputs.deploy_command }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+        PUBLIC_URL: ${{ inputs.public_url }}
+        READINESS_PATH: ${{ inputs.readiness_path }}
+      run: python3 "$GITHUB_ACTION_PATH/validate_inputs.py"
+
+    - name: Prepare ephemeral SSH material
+      id: ssh
+      shell: bash
+      env:
+        DEPLOY_KNOWN_HOSTS: ${{ inputs.known_hosts }}
+        DEPLOY_SSH_PRIVATE_KEY: ${{ inputs.ssh_private_key }}
+        TARGET_HOST: ${{ inputs.target_host }}
+      run: |
+        set -euo pipefail
+
+        ssh_directory="${RUNNER_TEMP}/platform-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        private_key="${ssh_directory}/id_ed25519"
+        known_hosts="${ssh_directory}/known_hosts"
+
+        {
+          echo "private_key=${private_key}"
+          echo "known_hosts=${known_hosts}"
+          echo "ssh_directory=${ssh_directory}"
+        } >> "$GITHUB_OUTPUT"
+
+        install -d -m 0700 "$ssh_directory"
+        printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$private_key"
+        printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$known_hosts"
+        chmod 0600 "$private_key" "$known_hosts"
+
+        unset DEPLOY_SSH_PRIVATE_KEY DEPLOY_KNOWN_HOSTS
+
+        ssh-keygen -y -P "" -f "$private_key" > /dev/null
+        ssh-keygen -F "$TARGET_HOST" -f "$known_hosts" > /dev/null
+
+    - name: Join deployment Tailnet
+      uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
+      with:
+        oauth-client-id: ${{ inputs.oauth_client_id }}
+        oauth-secret: ${{ inputs.oauth_secret }}
+        tags: tag:github-deploy
+
+    - name: Invoke restricted deployment
+      shell: bash
+      env:
+        DEPLOY_COMMAND: ${{ inputs.deploy_command }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+        KNOWN_HOSTS: ${{ steps.ssh.outputs.known_hosts }}
+        PRIVATE_KEY: ${{ steps.ssh.outputs.private_key }}
+        TARGET_HOST: ${{ inputs.target_host }}
+        TARGET_USER: ${{ inputs.target_user }}
+      run: |
+        set -euo pipefail
+
+        ssh_options=(
+          -i "$PRIVATE_KEY"
+          -o BatchMode=yes
+          -o ConnectionAttempts=1
+          -o ConnectTimeout=10
+          -o IdentitiesOnly=yes
+          -o LogLevel=ERROR
+          -o PasswordAuthentication=no
+          -o ServerAliveCountMax=3
+          -o ServerAliveInterval=10
+          -o StrictHostKeyChecking=yes
+          -o "UserKnownHostsFile=${KNOWN_HOSTS}"
+        )
+
+        deployed=0
+        for attempt in {1..12}; do
+          if ssh "${ssh_options[@]}" \
+            "${TARGET_USER}@${TARGET_HOST}" \
+            "${DEPLOY_COMMAND} ${IMAGE_TAG}"; then
+            deployed=1
+            break
+          fi
+
+          echo "SSH deployment attempt ${attempt}/12 failed; retrying in 5 seconds." >&2
+          sleep 5
+        done
+
+        if [[ "$deployed" -ne 1 ]]; then
+          echo "Deployment failed after 12 SSH attempts." >&2
+          exit 1
+        fi
+
+    - name: Verify public HTTPS application
+      shell: bash
+      env:
+        PUBLIC_URL: ${{ inputs.public_url }}
+        READINESS_PATH: ${{ inputs.readiness_path }}
+      run: |
+        set -euo pipefail
+
+        base_url="${PUBLIC_URL%/}"
+        endpoints=("${base_url}/" "${base_url}${READINESS_PATH}")
+
+        for endpoint in "${endpoints[@]}"; do
+          healthy=0
+          for attempt in {1..12}; do
+            if curl \
+              --connect-timeout 5 \
+              --fail \
+              --max-time 15 \
+              --output /dev/null \
+              --proto '=https' \
+              --silent \
+              --show-error \
+              "$endpoint"; then
+              healthy=1
+              break
+            fi
+
+            echo "HTTPS check ${attempt}/12 failed for ${endpoint}; retrying in 5 seconds." >&2
+            sleep 5
+          done
+
+          if [[ "$healthy" -ne 1 ]]; then
+            echo "HTTPS verification failed for ${endpoint}." >&2
+            exit 1
+          fi
+        done
+
+    - name: Record deployment
+      shell: bash
+      env:
+        IMAGE_TAG: ${{ inputs.image_tag }}
+        PUBLIC_URL: ${{ inputs.public_url }}
+      run: |
+        {
+          echo "### Application deployment"
+          echo
+          echo "Artifact: \`${IMAGE_TAG}\`"
+          echo
+          echo "Application: ${PUBLIC_URL}"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Remove ephemeral SSH material
+      if: always()
+      shell: bash
+      env:
+        KNOWN_HOSTS: ${{ steps.ssh.outputs.known_hosts }}
+        PRIVATE_KEY: ${{ steps.ssh.outputs.private_key }}
+        SSH_DIRECTORY: ${{ steps.ssh.outputs.ssh_directory }}
+      run: |
+        if [[ -n "${PRIVATE_KEY:-}" ]]; then
+          rm -f -- "$PRIVATE_KEY"
+        fi
+        if [[ -n "${KNOWN_HOSTS:-}" ]]; then
+          rm -f -- "$KNOWN_HOSTS"
+        fi
+        if [[ -n "${SSH_DIRECTORY:-}" ]]; then
+          rmdir -- "$SSH_DIRECTORY" 2>/dev/null || true
+        fi
