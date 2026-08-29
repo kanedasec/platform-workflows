@@ -23,6 +23,7 @@ class DeploymentInputValidationTests(unittest.TestCase):
             "DEPLOY_COMMAND": "deploy-sgp-manager",
             "IMAGE_TAG": "sha-" + "a" * 40,
             "PUBLIC_URL": "https://sgp.kanedasec.com.br",
+            "ROOT_EXPECTED_STATUS": "200",
             "READINESS_PATH": "/ready",
         }
 
@@ -74,6 +75,19 @@ class DeploymentInputValidationTests(unittest.TestCase):
         for value in ("ready", "//example.com/ready", "/../ready", "/ready?x=1"):
             with self.subTest(value=value):
                 configuration = self.configuration | {"READINESS_PATH": value}
+                with self.assertRaises(ValueError):
+                    VALIDATION.validate_environment(configuration)
+
+    def test_authenticated_root_status_is_accepted(self):
+        configuration = self.configuration | {"ROOT_EXPECTED_STATUS": "401"}
+        VALIDATION.validate_environment(configuration)
+
+    def test_root_status_rejects_errors_and_invalid_values(self):
+        for value in ("", "199", "400", "404", "500", "two-hundred"):
+            with self.subTest(value=value):
+                configuration = self.configuration | {
+                    "ROOT_EXPECTED_STATUS": value
+                }
                 with self.assertRaises(ValueError):
                     VALIDATION.validate_environment(configuration)
 

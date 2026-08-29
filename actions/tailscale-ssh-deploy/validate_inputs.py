@@ -11,6 +11,11 @@ TARGET_USER_PATTERN = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
 DEPLOY_COMMAND_PATTERN = re.compile(r"[a-z][a-z0-9-]{0,63}")
 IMAGE_TAG_PATTERN = re.compile(r"sha-[0-9a-f]{40}")
 READINESS_PATH_PATTERN = re.compile(r"/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*")
+ALLOWED_ROOT_STATUSES = {
+    *(str(value) for value in range(200, 400)),
+    "401",
+    "403",
+}
 
 
 def validate_target_host(value: str) -> None:
@@ -70,6 +75,13 @@ def validate_readiness_path(value: str) -> None:
         raise ValueError("readiness_path must be a safe absolute URL path")
 
 
+def validate_root_expected_status(value: str) -> None:
+    if value not in ALLOWED_ROOT_STATUSES:
+        raise ValueError(
+            "root_expected_status must be 200-399, 401, or 403"
+        )
+
+
 def validate_environment(environment: dict[str, str]) -> None:
     required = (
         "TARGET_HOST",
@@ -77,6 +89,7 @@ def validate_environment(environment: dict[str, str]) -> None:
         "DEPLOY_COMMAND",
         "IMAGE_TAG",
         "PUBLIC_URL",
+        "ROOT_EXPECTED_STATUS",
         "READINESS_PATH",
     )
     missing = [name for name in required if not environment.get(name)]
@@ -88,6 +101,7 @@ def validate_environment(environment: dict[str, str]) -> None:
     validate_deploy_command(environment["DEPLOY_COMMAND"])
     validate_image_tag(environment["IMAGE_TAG"])
     validate_public_url(environment["PUBLIC_URL"])
+    validate_root_expected_status(environment["ROOT_EXPECTED_STATUS"])
     validate_readiness_path(environment["READINESS_PATH"])
 
 

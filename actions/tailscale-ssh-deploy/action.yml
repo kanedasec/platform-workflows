@@ -29,6 +29,10 @@ inputs:
   public_url:
     description: Public HTTPS application origin used for smoke testing
     required: true
+  root_expected_status:
+    description: Exact HTTP status expected from the public application root
+    required: false
+    default: "200"
   readiness_path:
     description: Public readiness path appended to public_url
     required: false
@@ -46,6 +50,7 @@ runs:
         DEPLOY_COMMAND: ${{ inputs.deploy_command }}
         IMAGE_TAG: ${{ inputs.image_tag }}
         PUBLIC_URL: ${{ inputs.public_url }}
+        ROOT_EXPECTED_STATUS: ${{ inputs.root_expected_status }}
         READINESS_PATH: ${{ inputs.readiness_path }}
       run: python3 "$GITHUB_ACTION_PATH/validate_inputs.py"
 
@@ -134,30 +139,40 @@ runs:
       shell: bash
       env:
         PUBLIC_URL: ${{ inputs.public_url }}
+        ROOT_EXPECTED_STATUS: ${{ inputs.root_expected_status }}
         READINESS_PATH: ${{ inputs.readiness_path }}
       run: |
         set -euo pipefail
 
         base_url="${PUBLIC_URL%/}"
         endpoints=("${base_url}/" "${base_url}${READINESS_PATH}")
+        expected_statuses=("$ROOT_EXPECTED_STATUS" "200")
 
-        for endpoint in "${endpoints[@]}"; do
+        for index in "${!endpoints[@]}"; do
+          endpoint="${endpoints[$index]}"
+          expected_status="${expected_statuses[$index]}"
           healthy=0
           for attempt in {1..12}; do
-            if curl \
+            if actual_status="$(curl \
               --connect-timeout 5 \
-              --fail \
               --max-time 15 \
               --output /dev/null \
               --proto '=https' \
               --silent \
               --show-error \
-              "$endpoint"; then
-              healthy=1
-              break
+              --write-out '%{http_code}' \
+              "$endpoint")"; then
+              if [[ "$actual_status" == "$expected_status" ]]; then
+                healthy=1
+                break
+              fi
+
+              echo "HTTPS check ${attempt}/12 returned ${actual_status} for ${endpoint}; expected ${expected_status}." >&2
+            else
+              echo "HTTPS check ${attempt}/12 could not reach ${endpoint}." >&2
             fi
 
-            echo "HTTPS check ${attempt}/12 failed for ${endpoint}; retrying in 5 seconds." >&2
+            echo "Retrying in 5 seconds." >&2
             sleep 5
           done
 
