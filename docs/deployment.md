@@ -31,6 +31,7 @@ callers.
           deploy_command: ${{ vars.DEPLOY_COMMAND }}
           image_tag: sha-${{ github.sha }}
           public_url: ${{ vars.DEPLOY_URL }}
+          root_expected_status: "200"
           readiness_path: /ready
 ```
 
@@ -47,6 +48,12 @@ Required environment variables:
 - `DEPLOY_KNOWN_HOSTS`: a trusted, pinned SSH host key entry
 - `DEPLOY_COMMAND`: a forced command name without arguments
 - `DEPLOY_URL`: an HTTPS origin without a path
+
+The action requires an exact `200` from the readiness path. The root defaults
+to `200`, but an application that deliberately protects `/` may set
+`root_expected_status: "401"` or `"403"`. This verifies that the protected
+route is reachable without copying application credentials into GitHub. Other
+client and server error statuses are rejected as configuration errors.
 
 The Tailscale OAuth client must have only writable auth-key scope and must be
 restricted to `tag:github-deploy`. Tailnet policy must grant that tag only
