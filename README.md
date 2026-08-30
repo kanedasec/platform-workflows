@@ -3,6 +3,9 @@
 Reusable CI/CD and DevSecOps building blocks for `kanedasec` application
 repositories.
 
+Repository-specific implementation and security rules for coding agents are
+documented in [`AGENTS.md`](AGENTS.md).
+
 This repository centralizes scanner configuration, differential-report helpers,
 and SGP Manager policy enforcement. Application repositories will retain only
 small caller workflows and application-specific build metadata.
