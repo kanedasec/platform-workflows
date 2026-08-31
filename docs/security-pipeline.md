@@ -68,3 +68,8 @@ pin them. A safe rollout is:
 7. migrate remaining consumers deliberately.
 
 Never reference a branch to collapse these phases.
+
+The final caller must keep `Security policy (SGP Manager)` as an `always()` job
+that checks both preflight and reusable-scanner results before reading artifacts.
+This prevents a failed prerequisite from turning the required policy check into
+a successful/skipped result.

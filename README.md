@@ -14,6 +14,10 @@ SGP Manager also supplies the ordered global security-pipeline selection. A
 fail-closed preflight action validates that selection before any scanner job is
 eligible to run; scanner jobs never receive the SGP API credential.
 
+The current executable gate registry maps `sast` to Semgrep, `secrets` to
+Gitleaks, and `sca` to Trivy. Selected scanners run in parallel and only their
+artifacts are evaluated.
+
 ## Trust model
 
 - Application workflows call released revisions by a full Git commit SHA.

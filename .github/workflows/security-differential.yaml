@@ -2,6 +2,11 @@ name: Reusable differential security scanners
 
 on:
   workflow_call:
+    inputs:
+      gates:
+        description: Validated non-empty JSON array of selected gate slugs
+        required: true
+        type: string
 
 permissions:
   actions: read
@@ -14,6 +19,7 @@ defaults:
 jobs:
   sast:
     name: SAST (Semgrep)
+    if: contains(fromJSON(inputs.gates), 'sast')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
@@ -61,6 +67,7 @@ jobs:
 
   secrets:
     name: Secrets (Gitleaks)
+    if: contains(fromJSON(inputs.gates), 'secrets')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
@@ -90,6 +97,7 @@ jobs:
 
   sca:
     name: SCA (Trivy)
+    if: contains(fromJSON(inputs.gates), 'sca')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
