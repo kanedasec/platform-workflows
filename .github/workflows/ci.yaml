@@ -61,7 +61,9 @@ jobs:
       - name: Run policy helper tests
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python -m unittest discover --start-directory tests --pattern "test_*.py"
+        run: |
+          python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
+          python -m unittest discover --start-directory tests --pattern "test_*.py"
 
       - name: Scan platform changes for secrets
         if: github.event_name == 'pull_request'

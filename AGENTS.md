@@ -95,9 +95,10 @@ SGP Manager over HTTPS, validates the returned application/gate/timestamp, and
 writes an auditable decision artifact. Unknown scanner severity is `critical`.
 Operational errors return a distinct non-zero result and fail closed.
 
-`actions/sgp-policy-from-artifacts/` downloads the three fixed scanner
-artifacts and applies the SGP policy independently to `sast`, `secrets`, and
-`sca`. The application slug comes from the caller repository name.
+`actions/sgp-policy-from-artifacts/` downloads only the selected scanner
+artifacts and applies the SGP policy independently to each selected gate. The
+application slug comes from the caller repository name. Gate selection is
+strictly revalidated before any report is read.
 
 `actions/sgp-pipeline-config/` is the secret-bearing preflight boundary. It
 derives the application slug from the caller repository, calls the fixed SGP
@@ -166,6 +167,8 @@ applications.
 From the repository root:
 
 ```bash
+python3 -m pip install --requirement requirements-dev.txt
+
 python3 -m unittest discover \
   --start-directory tests \
   --pattern 'test_*.py'
