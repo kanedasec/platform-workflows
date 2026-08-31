@@ -99,6 +99,12 @@ Operational errors return a distinct non-zero result and fail closed.
 artifacts and applies the SGP policy independently to `sast`, `secrets`, and
 `sca`. The application slug comes from the caller repository name.
 
+`actions/sgp-pipeline-config/` is the secret-bearing preflight boundary. It
+derives the application slug from the caller repository, calls the fixed SGP
+Manager HTTPS origin without following redirects, and validates a fresh,
+non-empty, unique, contiguous ordered subset of the supported gates. Unknown
+gate implementations fail closed before scanners run.
+
 `actions/tailscale-ssh-deploy/` validates deployment inputs before using
 credentials. It accepts only a Tailscale IPv4 target, restricted Unix user,
 command name without arguments, immutable image tag, clean HTTPS origin, safe
@@ -116,6 +122,9 @@ cleanup with `if: always()`, and public post-deployment verification.
   only vulnerabilities newly introduced by the head.
 - Scanners produce evidence. SGP Manager determines which normalized
   severities block for the exact application and gate.
+- Pipeline discovery runs before scanners and exposes only the validated gate
+  list to downstream jobs. The SGP credential must remain confined to the
+  preflight and policy jobs.
 
 Do not silently convert differential scanning into a full-repository gate or
 vice versa. That is a policy change and must be documented and reviewed.
@@ -187,4 +196,3 @@ compatibility behavior, tests run, and any manual environment or VPS change.
 Do not describe work as complete merely because this repository merged; at
 least one representative consumer must successfully use security-sensitive new
 behavior before rollout is considered proven.
-

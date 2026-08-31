@@ -10,6 +10,10 @@ This repository centralizes scanner configuration, differential-report helpers,
 and SGP Manager policy enforcement. Application repositories will retain only
 small caller workflows and application-specific build metadata.
 
+SGP Manager also supplies the ordered global security-pipeline selection. A
+fail-closed preflight action validates that selection before any scanner job is
+eligible to run; scanner jobs never receive the SGP API credential.
+
 ## Trust model
 
 - Application workflows call released revisions by a full Git commit SHA.
