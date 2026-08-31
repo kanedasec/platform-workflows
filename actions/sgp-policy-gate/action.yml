@@ -20,6 +20,10 @@ inputs:
   decision_directory:
     description: Absolute directory for policy decision JSON files
     required: true
+  gates:
+    description: Non-empty JSON array of selected gate slugs in policy order
+    required: false
+    default: '["sast","secrets","sca"]'
 
 runs:
   using: composite
@@ -33,6 +37,7 @@ runs:
         GITLEAKS_REPORT: ${{ inputs.gitleaks_report }}
         TRIVY_REPORT: ${{ inputs.trivy_report }}
         DECISION_DIRECTORY: ${{ inputs.decision_directory }}
+        ENABLED_GATES: ${{ inputs.gates }}
       run: |
         if [[ -z "${SGP_MANAGER_API_KEY:-}" ]]; then
           echo "SGP_MANAGER_API_KEY is not configured"
@@ -60,7 +65,17 @@ runs:
           fi
         }
 
-        run_gate sast semgrep "$SEMGREP_REPORT"
-        run_gate secrets gitleaks "$GITLEAKS_REPORT"
-        run_gate sca trivy "$TRIVY_REPORT"
+        selection_file="$RUNNER_TEMP/sgp-selected-gates.txt"
+        python3 "$GITHUB_ACTION_PATH/selected_gates.py" \
+          --gates "$ENABLED_GATES" \
+          --output "$selection_file"
+
+        while IFS= read -r gate; do
+          case "$gate" in
+            sast) run_gate sast semgrep "$SEMGREP_REPORT" ;;
+            secrets) run_gate secrets gitleaks "$GITLEAKS_REPORT" ;;
+            sca) run_gate sca trivy "$TRIVY_REPORT" ;;
+            *) echo "Unsupported gate after validation: $gate"; exit 2 ;;
+          esac
+        done < "$selection_file"
         exit "$status"

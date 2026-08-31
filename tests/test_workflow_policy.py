@@ -37,6 +37,24 @@ class WorkflowPolicyTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(checkout_count, disabled_count)
 
+    def test_pipeline_resolver_has_no_caller_controlled_destination(self):
+        action = (
+            ROOT / "actions" / "sgp-pipeline-config" / "action.yml"
+        ).read_text(encoding="utf-8")
+        implementation = (
+            ROOT / "actions" / "sgp-pipeline-config" / "pipeline_config.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("inputs:", action)
+        self.assertIn("https://sgp.kanedasec.com.br", action)
+        self.assertIn("github.event.repository.name", action)
+        self.assertIn("class RejectRedirects", implementation)
+
+    def test_policy_gate_default_remains_backward_compatible(self):
+        action = (
+            ROOT / "actions" / "sgp-policy-gate" / "action.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("default: '[\"sast\",\"secrets\",\"sca\"]'", action)
+
 
 if __name__ == "__main__":
     unittest.main()

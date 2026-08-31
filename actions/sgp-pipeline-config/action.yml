@@ -1,0 +1,34 @@
+name: Resolve SGP Manager security pipeline
+description: Resolve and validate the centrally configured security gates before scanners run.
+
+outputs:
+  gates:
+    description: Compact JSON array of validated gate slugs in configured order.
+    value: ${{ steps.resolve.outputs.gates }}
+  configuration_path:
+    description: Path to the validated SGP Manager response.
+    value: ${{ steps.resolve.outputs.configuration_path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve security pipeline
+      id: resolve
+      shell: bash
+      env:
+        SGP_MANAGER_URL: https://sgp.kanedasec.com.br
+        SGP_APPLICATION: ${{ github.event.repository.name }}
+      run: |
+        if [[ -z "${SGP_MANAGER_API_KEY:-}" ]]; then
+          echo "SGP_MANAGER_API_KEY is not configured"
+          exit 2
+        fi
+
+        configuration_path="$RUNNER_TEMP/security-pipeline.json"
+        gates="$(python3 "$GITHUB_ACTION_PATH/pipeline_config.py" \
+          --manager-url "$SGP_MANAGER_URL" \
+          --application "$SGP_APPLICATION" \
+          --response-output "$configuration_path")"
+        printf 'gates=%s\n' "$gates" >> "$GITHUB_OUTPUT"
+        printf 'configuration_path=%s\n' "$configuration_path" >> "$GITHUB_OUTPUT"
+        echo "Resolved security pipeline for $SGP_APPLICATION: $gates"
