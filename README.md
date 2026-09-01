@@ -6,17 +6,17 @@ repositories.
 Repository-specific implementation and security rules for coding agents are
 documented in [`AGENTS.md`](AGENTS.md).
 
-This repository centralizes scanner configuration, differential-report helpers,
-and SGP Manager policy enforcement. Application repositories will retain only
-small caller workflows and application-specific build metadata.
+This repository centralizes full-repository scanner configuration and SGP
+Manager policy enforcement. Application repositories retain only small caller
+workflows and application-specific build metadata.
 
-SGP Manager also supplies the ordered global security-pipeline selection. A
+SGP Manager supplies each application's assigned ordered security pipeline. A
 fail-closed preflight action validates that selection before any scanner job is
 eligible to run; scanner jobs never receive the SGP API credential.
 
 The current executable gate registry maps `sast` to Semgrep, `secrets` to
-Gitleaks, and `sca` to Trivy. Selected scanners run in parallel and only their
-artifacts are evaluated.
+Gitleaks, and `sca` to Trivy. Selected scanners run in parallel against the
+complete current pull-request snapshot and only their artifacts are evaluated.
 
 ## Trust model
 

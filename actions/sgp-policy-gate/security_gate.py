@@ -236,7 +236,7 @@ def main() -> int:
     print(f"Gate: {args.gate} ({args.scanner})")
     print(f"Blocking severities: {','.join(blocking_severities) or 'none'}")
     print(
-        "Differential findings: "
+        "Full-repository findings: "
         + ", ".join(
             f"{severity}={counts.get(severity, 0)}"
             for severity in CANONICAL_SEVERITIES

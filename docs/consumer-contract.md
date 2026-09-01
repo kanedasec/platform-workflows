@@ -78,16 +78,17 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  differential-security:
+  security-scans:
+    name: Full repository security
     needs: pipeline-config
-    uses: kanedasec/platform-workflows/.github/workflows/security-differential.yaml@WORKFLOW_COMMIT_SHA
+    uses: kanedasec/platform-workflows/.github/workflows/security.yaml@WORKFLOW_COMMIT_SHA
     with:
       gates: ${{ needs.pipeline-config.outputs.gates }}
 
   policy-gate:
     name: Security policy (SGP Manager)
     if: always()
-    needs: [pipeline-config, differential-security]
+    needs: [pipeline-config, security-scans]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:
@@ -99,7 +100,7 @@ jobs:
       - name: Require successful pipeline discovery and scanners
         env:
           PIPELINE_RESULT: ${{ needs.pipeline-config.result }}
-          SCANNER_RESULT: ${{ needs.differential-security.result }}
+          SCANNER_RESULT: ${{ needs.security-scans.result }}
         run: |
           if [[ "$PIPELINE_RESULT" != "success" || "$SCANNER_RESULT" != "success" ]]; then
             echo "Security prerequisites failed: pipeline=$PIPELINE_RESULT scanners=$SCANNER_RESULT"

@@ -40,7 +40,7 @@ runs:
         gates: ${{ inputs.gates }}
         semgrep_report: ${{ runner.temp }}/security-reports/semgrep.json
         gitleaks_report: ${{ runner.temp }}/security-reports/gitleaks.json
-        trivy_report: ${{ runner.temp }}/security-reports/trivy-delta.json
+        trivy_report: ${{ runner.temp }}/security-reports/trivy.json
         decision_directory: ${{ runner.temp }}/policy-decisions
 
     - name: Upload SGP Manager decisions

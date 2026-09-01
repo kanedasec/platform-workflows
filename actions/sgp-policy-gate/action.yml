@@ -9,13 +9,13 @@ inputs:
     description: SGP application slug
     required: true
   semgrep_report:
-    description: Absolute path to the differential Semgrep JSON report
+    description: Absolute path to the full-repository Semgrep JSON report
     required: true
   gitleaks_report:
-    description: Absolute path to the differential Gitleaks JSON report
+    description: Absolute path to the full-repository Gitleaks JSON report
     required: true
   trivy_report:
-    description: Absolute path to the differential Trivy JSON report
+    description: Absolute path to the full-repository Trivy JSON report
     required: true
   decision_directory:
     description: Absolute directory for policy decision JSON files
