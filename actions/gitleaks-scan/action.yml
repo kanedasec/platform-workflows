@@ -1,13 +1,7 @@
-name: Differential Gitleaks scan
-description: Scan a pull request commit range and produce a fully redacted JSON report.
+name: Full-repository Gitleaks scan
+description: Scan the complete current repository snapshot and produce a fully redacted JSON report.
 
 inputs:
-  base_sha:
-    description: Pull request base commit SHA
-    required: true
-  head_sha:
-    description: Pull request head commit SHA
-    required: true
   report_path:
     description: Absolute path for the Gitleaks JSON report
     required: true
@@ -32,20 +26,17 @@ runs:
         chmod 0755 "$bin_dir/gitleaks"
         echo "$bin_dir" >> "$GITHUB_PATH"
 
-    - name: Scan pull request commits
+    - name: Scan complete repository snapshot
       shell: bash
       env:
-        BASE_SHA: ${{ inputs.base_sha }}
-        HEAD_SHA: ${{ inputs.head_sha }}
         REPORT_PATH: ${{ inputs.report_path }}
       run: |
         report_parent="${REPORT_PATH%/*}"
         mkdir -p "$report_parent"
-        gitleaks git \
+        gitleaks dir \
           --config "$GITHUB_ACTION_PATH/gitleaks.toml" \
           --gitleaks-ignore-path "$GITHUB_ACTION_PATH/gitleaks.ignore" \
           --ignore-gitleaks-allow \
-          --log-opts="${BASE_SHA}..${HEAD_SHA}" \
           --report-format json \
           --report-path "$REPORT_PATH" \
           --redact=100 \

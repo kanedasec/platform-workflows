@@ -64,6 +64,16 @@ class WorkflowPolicyTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("default: '[\"sast\",\"secrets\",\"sca\"]'", action)
 
+    def test_gitleaks_scans_the_complete_current_snapshot(self):
+        action = (
+            ROOT / "actions" / "gitleaks-scan" / "action.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("gitleaks dir", action)
+        self.assertNotIn("--log-opts", action)
+        self.assertNotIn("base_sha:", action)
+        self.assertNotIn("head_sha:", action)
+        self.assertIn("--redact=100", action)
+
     def test_security_scanners_require_selected_gate_input(self):
         workflow = (
             ROOT / ".github" / "workflows" / "security-differential.yaml"
