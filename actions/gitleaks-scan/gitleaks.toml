@@ -5,9 +5,9 @@ minVersion = "v8.30.0"
 useDefault = true
 
 [[allowlists]]
-description = "GitHub workflow, action metadata, and platform documentation uses lines pinned to immutable commit SHAs"
+description = "GitHub workflow, blueprint, action metadata, and platform documentation uses lines pinned to immutable commit SHAs"
 targetRules = ["sourcegraph-access-token"]
 condition = "AND"
 regexTarget = "line"
-paths = ['''^(?:\.github/workflows/[^/]+\.ya?ml|(?:.+/)?action\.ya?ml|docs/[^/]+\.md)$''']
+paths = ['''^(?:\.github/workflows/[^/]+\.ya?ml|blueprints/github/[^/]+\.ya?ml|(?:.+/)?action\.ya?ml|docs/[^/]+\.md)$''']
 regexes = ['''^\s*uses:\s+[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*@[0-9a-f]{40}(\s+#[^\r\n]*)?$''']

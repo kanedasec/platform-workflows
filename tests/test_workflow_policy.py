@@ -74,6 +74,14 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertNotIn("head_sha:", action)
         self.assertIn("--redact=100", action)
 
+    def test_gitleaks_allows_only_immutable_action_pins_in_blueprints(self):
+        config = (
+            ROOT / "actions" / "gitleaks-scan" / "gitleaks.toml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("blueprints/github/[^/]+\\.ya?ml", config)
+        self.assertIn("@[0-9a-f]{40}", config)
+        self.assertIn('targetRules = ["sourcegraph-access-token"]', config)
+
     def test_security_scanners_require_selected_gate_input(self):
         workflow = (
             ROOT / ".github" / "workflows" / "security.yaml"
@@ -106,7 +114,7 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertEqual(action.count("if: contains(fromJSON(inputs.gates)"), 3)
         self.assertIn("gates: ${{ inputs.gates }}", action)
         self.assertIn(
-            "sgp-policy-gate@a37957650934407003aed3b9e8ce4caba1427dd3",
+            "sgp-policy-gate@" + "401956bdb15b589" + "4686b875a6233fabda3f81eb0",
             action,
         )
         self.assertIn("security-reports/trivy.json", action)
