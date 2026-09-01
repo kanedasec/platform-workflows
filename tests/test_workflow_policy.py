@@ -76,7 +76,7 @@ class WorkflowPolicyTests(unittest.TestCase):
 
     def test_security_scanners_require_selected_gate_input(self):
         workflow = (
-            ROOT / ".github" / "workflows" / "security-differential.yaml"
+            ROOT / ".github" / "workflows" / "security.yaml"
         ).read_text(encoding="utf-8")
         self.assertIn("gates:\n        description:", workflow)
         self.assertIn("required: true\n        type: string", workflow)
@@ -84,6 +84,20 @@ class WorkflowPolicyTests(unittest.TestCase):
             self.assertIn(
                 f"if: contains(fromJSON(inputs.gates), '{gate}')", workflow
             )
+
+    def test_security_scanners_cover_the_complete_current_snapshot(self):
+        workflow = (
+            ROOT / ".github" / "workflows" / "security.yaml"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("--baseline-commit", workflow)
+        self.assertNotIn("--log-opts", workflow)
+        self.assertNotIn("git worktree", workflow)
+        self.assertNotIn("trivy-base", workflow)
+        self.assertNotIn("trivy-delta", workflow)
+        self.assertNotIn("trivy-diff", workflow)
+        self.assertIn("Scan complete repository snapshot", workflow)
+        self.assertIn("Scan complete dependency snapshot", workflow)
+        self.assertIn("security-reports/trivy.json", workflow)
 
     def test_policy_wrapper_downloads_only_selected_artifacts(self):
         action = (
@@ -95,6 +109,7 @@ class WorkflowPolicyTests(unittest.TestCase):
             "sgp-policy-gate@a37957650934407003aed3b9e8ce4caba1427dd3",
             action,
         )
+        self.assertIn("security-reports/trivy.json", action)
 
 
 if __name__ == "__main__":

@@ -17,10 +17,10 @@ system, package registry credential broker, or deployment control plane.
 ```text
 Application pull request
   |-> reusable language CI
-  `-> differential scanners
+  `-> full-repository scanners
         |-> Semgrep JSON
         |-> redacted Gitleaks JSON
-        `-> differential Trivy JSON
+        `-> full Trivy JSON
               -> SGP Manager policy evaluation
               -> PASS or BLOCK
 
@@ -67,14 +67,14 @@ persistent general-purpose runner or direct access to a VPS Docker socket.
 profiles. Add typed `workflow_call` inputs with safe defaults when extending a
 profile. Do not add a generic caller-controlled command input.
 
-`.github/workflows/security-differential.yaml` produces scanner evidence for a
+`.github/workflows/security.yaml` produces full-snapshot scanner evidence for a
 pull request. Preserve these artifact names and formats unless consumers and
 the policy adapter are migrated together:
 
 ```text
 semgrep-report   -> semgrep.json
 gitleaks-report  -> gitleaks.json
-trivy-report     -> trivy-delta.json
+trivy-report     -> trivy.json
 ```
 
 `.github/workflows/container-publish.yaml` validates every image definition,
@@ -85,10 +85,6 @@ derived from the caller repository and component name.
 `actions/gitleaks-scan/` owns the centrally reviewed Gitleaks configuration.
 `gitleaks.ignore` contains exact, reviewed fingerprints. Do not enable
 repository-local allowlists or inline suppression comments.
-
-`actions/trivy-diff/` compares normalized vulnerability identity across base
-and head reports. Preserve package identity in the comparison; the same CVE in
-a different package can be a new finding.
 
 `actions/sgp-policy-gate/` validates scanner JSON, normalizes severities, calls
 SGP Manager over HTTPS, validates the returned application/gate/timestamp, and
@@ -113,22 +109,23 @@ readiness path, and an approved expected root status. It must retain strict
 host-key checking, public-key-only authentication, ephemeral SSH material,
 cleanup with `if: always()`, and public post-deployment verification.
 
-## Differential security semantics
+## Full-repository security semantics
 
-- Semgrep uses the pull request base as `--baseline-commit` and disables
-  metrics and inline `nosem` suppression.
-- Gitleaks scans the pull-request commit range with the central configuration
-  and uploads only redacted JSON.
-- Trivy scans base and head with the same vulnerability database, then emits
-  only vulnerabilities newly introduced by the head.
+- Semgrep scans the complete current pull-request snapshot and disables metrics
+  and inline `nosem` suppression.
+- Gitleaks scans the complete current working tree with the central
+  configuration and uploads only redacted JSON.
+- Trivy scans all dependency manifests and lockfiles in the current snapshot
+  and emits the complete vulnerability report.
 - Scanners produce evidence. SGP Manager determines which normalized
   severities block for the exact application and gate.
 - Pipeline discovery runs before scanners and exposes only the validated gate
   list to downstream jobs. The SGP credential must remain confined to the
   preflight and policy jobs.
 
-Do not silently convert differential scanning into a full-repository gate or
-vice versa. That is a policy change and must be documented and reviewed.
+Do not add baselines, commit ranges, or report-diff filtering without treating
+that as a reviewed policy change. Existing findings must remain enforceable on
+every pull request until fixed or explicitly bypassed.
 
 ## Compatibility and release discipline
 
@@ -188,7 +185,7 @@ Tests must continue to enforce:
 - disabled checkout credential persistence;
 - report schema and severity normalization;
 - stale or mismatched SGP responses failing closed;
-- Trivy package-aware differential behavior;
+- absence of Semgrep baselines, Gitleaks commit ranges, and Trivy report diffs;
 - strict deployment input validation.
 
 ## Documentation and handoff

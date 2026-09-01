@@ -32,10 +32,10 @@ The current workflow has an explicit implementation registry:
 | `secrets` | Gitleaks | `gitleaks-report` |
 | `sca` | Trivy | `trivy-report` |
 
-An administrator can create other SGP gates, but adding an unknown slug to the
-global pipe intentionally blocks preflight. Supporting a new executable gate
-requires a reviewed platform change first, followed by the SGP configuration
-change.
+An administrator can create other SGP gates, but adding an unknown slug to an
+assigned gate policy intentionally blocks preflight. Supporting a new
+executable gate requires a reviewed platform change first, followed by the SGP
+configuration change.
 
 ## Fail-closed validation
 
@@ -53,6 +53,12 @@ Pipeline discovery rejects:
 The ordered selection controls which scanners and policy evaluations execute.
 Selected scanners remain parallel because their evidence is independent; order
 is retained for audit and presentation rather than used to serialize work.
+
+Each selected scanner evaluates the complete current pull-request snapshot.
+Semgrep has no baseline commit, Gitleaks scans the full checked-out working
+tree, and Trivy evaluates all dependency manifests and lockfiles once. Existing
+findings therefore remain visible and enforceable on every pull request until
+they are fixed or covered by an explicit SGP bypass.
 
 ## Immutable rollout
 
