@@ -3,7 +3,7 @@ description: Resolve SGP gates, or run every registered guardrail with no bypass
 
 outputs:
   gates:
-    description: Compact JSON array of validated gate slugs in configured order.
+    description: Compact JSON execution order containing every registered gate.
     value: ${{ steps.resolve.outputs.gates }}
   configuration_path:
     description: Path to the validated SGP Manager response.

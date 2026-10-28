@@ -11,7 +11,7 @@ Application pull request
      OR, when SGP is unavailable, select every registered gate
   -> every registered scanner job (no secrets)
   -> complete report downloads
-  -> SGP enforcement evaluation per selected gate
+  -> SGP enforcement evaluation per executed gate
      OR strict low+medium+high+critical blocking with no bypasses
 ```
 
@@ -78,7 +78,7 @@ during enforcement. Scanners remain parallel because their evidence is
 independent; order is retained for audit and presentation rather than used to
 serialize work.
 
-Each selected scanner evaluates the complete current pull-request snapshot.
+Each registered scanner evaluates the complete current pull-request snapshot.
 Semgrep has no baseline commit, Gitleaks scans the full checked-out working
 tree, and Trivy evaluates all dependency manifests and lockfiles once. Existing
 findings therefore remain visible and enforceable on every pull request until
@@ -86,18 +86,17 @@ they are fixed or covered by an explicit SGP bypass.
 
 ## Immutable rollout
 
-The resolver and dynamic policy action must be merged before reusable workflows
-pin them. A safe rollout is:
+The artifact wrapper and policy evaluator are colocated and execute from the
+same immutable platform revision, avoiding a stale nested self-pin. A safe
+rollout is:
 
-1. deploy the backward-compatible SGP endpoint and database migration;
-2. merge and validate the resolver/action implementation;
-3. record that immutable platform commit;
-4. update the reusable workflow and artifact wrapper to pin that commit;
-5. merge and record the workflow commit;
-6. update one representative application caller and prove end-to-end behavior;
-7. migrate remaining consumers deliberately.
+1. implement and locally validate the resolver, evaluator, wrapper, and tests;
+2. merge through the protected platform review and record the immutable commit;
+3. update one representative application caller to that exact commit and prove
+   online and offline behavior end to end;
+4. migrate remaining consumers deliberately.
 
-Never reference a branch to collapse these phases.
+Never reference a branch or mutable tag to collapse these phases.
 
 The final caller must keep `Security policy (SGP Manager)` as an `always()` job
 that checks both preflight and reusable-scanner results before reading artifacts.

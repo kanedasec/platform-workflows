@@ -127,16 +127,14 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertIn("Scan complete dependency snapshot", workflow)
         self.assertIn("security-reports/trivy.json", workflow)
 
-    def test_policy_wrapper_downloads_only_selected_artifacts(self):
+    def test_policy_wrapper_downloads_execution_artifacts(self):
         action = (
             ROOT / "actions" / "sgp-policy-from-artifacts" / "action.yml"
         ).read_text(encoding="utf-8")
         self.assertEqual(action.count("if: contains(fromJSON(inputs.gates)"), 3)
-        self.assertIn("gates: ${{ inputs.gates }}", action)
-        self.assertIn(
-            "sgp-policy-gate@" + "401956bdb15b589" + "4686b875a6233fabda3f81eb0",
-            action,
-        )
+        self.assertIn("ENABLED_GATES: ${{ inputs.gates }}", action)
+        self.assertIn("../sgp-policy-gate/run_policy_gates.sh", action)
+        self.assertNotIn("sgp-policy-gate@", action)
         self.assertIn("security-reports/trivy.json", action)
 
 

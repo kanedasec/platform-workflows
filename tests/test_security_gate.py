@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -17,6 +18,7 @@ MODULE_PATH = (
     / "sgp-policy-gate"
     / "security_gate.py"
 )
+RUNNER_PATH = MODULE_PATH.with_name("run_policy_gates.sh")
 SPEC = importlib.util.spec_from_file_location("security_gate", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 security_gate = importlib.util.module_from_spec(SPEC)
@@ -150,6 +152,61 @@ class SecurityGateTests(unittest.TestCase):
             blocked = json.loads(decision.read_text(encoding="utf-8"))
             self.assertEqual(blocked["blocking_findings"], 1)
             self.assertEqual(blocked["decision"], "BLOCK")
+
+    def test_offline_runner_executes_all_gates_and_aggregates_decisions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "reports"
+            decisions = root / "decisions"
+            reports.mkdir()
+            semgrep = reports / "semgrep.json"
+            gitleaks = reports / "gitleaks.json"
+            trivy = reports / "trivy.json"
+            semgrep.write_text('{"results": []}', encoding="utf-8")
+            gitleaks.write_text("[]", encoding="utf-8")
+            trivy.write_text('{"Results": []}', encoding="utf-8")
+            environment = {
+                "PATH": os.environ["PATH"],
+                "SGP_MANAGER_URL": "https://sgp.kanedasec.com.br",
+                "SGP_APPLICATION": "second-brain",
+                "SEMGREP_REPORT": str(semgrep),
+                "GITLEAKS_REPORT": str(gitleaks),
+                "TRIVY_REPORT": str(trivy),
+                "DECISION_DIRECTORY": str(decisions),
+                "ENABLED_GATES": '["sast","secrets","sca"]',
+                "RUNNER_TEMP": str(root),
+            }
+
+            clean = subprocess.run(
+                [str(RUNNER_PATH)],
+                check=False,
+                capture_output=True,
+                env=environment,
+                text=True,
+            )
+            self.assertEqual(clean.returncode, 0, clean.stderr)
+            self.assertEqual(
+                {path.name for path in decisions.glob("*.json")},
+                {"sast.json", "secrets.json", "sca.json"},
+            )
+
+            semgrep.write_text(
+                '{"results": [{"extra": {"severity": "INFO"}}]}',
+                encoding="utf-8",
+            )
+            blocked = subprocess.run(
+                [str(RUNNER_PATH)],
+                check=False,
+                capture_output=True,
+                env=environment,
+                text=True,
+            )
+            self.assertEqual(blocked.returncode, 1, blocked.stderr)
+            decision = json.loads(
+                (decisions / "sast.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(decision["policy_source"], "offline-no-bypass")
+            self.assertEqual(decision["decision"], "BLOCK")
 
     def test_manager_url_must_be_https_without_embedded_credentials(self):
         expected = "https://sgp.kanedasec.com.br/api/v1/policies/evaluate-enforcement"

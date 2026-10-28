@@ -3,7 +3,7 @@ description: Download scanner reports and apply online bypasses or strict offlin
 
 inputs:
   gates:
-    description: Validated non-empty JSON array of selected gate slugs
+    description: Validated JSON execution order containing every registered gate
     required: true
 
 runs:
@@ -30,18 +30,18 @@ runs:
         name: trivy-report
         path: ${{ runner.temp }}/security-reports
 
-    - name: Apply SGP Manager gate policies
-      uses: kanedasec/platform-workflows/actions/sgp-policy-gate@401956bdb15b5894686b875a6233fabda3f81eb0
+    - name: Apply online bypasses or strict offline policy
+      shell: bash
       env:
         SGP_MANAGER_API_KEY: ${{ env.SGP_MANAGER_API_KEY }}
-      with:
-        manager_url: https://sgp.kanedasec.com.br
-        application: ${{ github.event.repository.name }}
-        gates: ${{ inputs.gates }}
-        semgrep_report: ${{ runner.temp }}/security-reports/semgrep.json
-        gitleaks_report: ${{ runner.temp }}/security-reports/gitleaks.json
-        trivy_report: ${{ runner.temp }}/security-reports/trivy.json
-        decision_directory: ${{ runner.temp }}/policy-decisions
+        SGP_MANAGER_URL: https://sgp.kanedasec.com.br
+        SGP_APPLICATION: ${{ github.event.repository.name }}
+        SEMGREP_REPORT: ${{ runner.temp }}/security-reports/semgrep.json
+        GITLEAKS_REPORT: ${{ runner.temp }}/security-reports/gitleaks.json
+        TRIVY_REPORT: ${{ runner.temp }}/security-reports/trivy.json
+        DECISION_DIRECTORY: ${{ runner.temp }}/policy-decisions
+        ENABLED_GATES: ${{ inputs.gates }}
+      run: "$GITHUB_ACTION_PATH/../sgp-policy-gate/run_policy_gates.sh"
 
     - name: Upload SGP Manager decisions
       if: always()
