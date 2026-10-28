@@ -4,6 +4,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from unittest import mock
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -105,6 +106,63 @@ class PipelineConfigTests(unittest.TestCase):
             output = Path(directory) / "pipeline.json"
             pipeline_config.write_response(output, value)
             self.assertEqual(json.loads(output.read_text(encoding="utf-8")), value)
+
+    def test_unavailable_manager_selects_every_gate_without_bypasses(self):
+        with mock.patch.object(
+            pipeline_config,
+            "fetch_pipeline",
+            side_effect=pipeline_config.PipelineConfigError("manager unavailable"),
+        ):
+            result, gates, fallback_active = pipeline_config.resolve_pipeline_or_fallback(
+                "https://sgp.kanedasec.com.br",
+                "configured-key",
+                "second-brain",
+                1,
+            )
+
+        self.assertTrue(fallback_active)
+        self.assertEqual(gates, ["sast", "secrets", "sca"])
+        self.assertEqual(result["policy_mode"], "offline-no-bypass")
+        self.assertEqual(result["execution_gates"], ["sast", "secrets", "sca"])
+        self.assertEqual(
+            result["gates"],
+            [
+                {"gate": "sast", "position": 0},
+                {"gate": "secrets", "position": 1},
+                {"gate": "sca", "position": 2},
+            ],
+        )
+
+    def test_missing_manager_credential_also_uses_strict_fallback(self):
+        with mock.patch.object(pipeline_config, "fetch_pipeline") as fetch:
+            _, gates, fallback_active = pipeline_config.resolve_pipeline_or_fallback(
+                "https://sgp.kanedasec.com.br", "", "second-brain", 1
+            )
+        fetch.assert_not_called()
+        self.assertTrue(fallback_active)
+        self.assertEqual(gates, list(pipeline_config.KNOWN_GATES))
+
+    def test_online_configuration_cannot_omit_scanner_execution(self):
+        configured = response([{"gate": "secrets", "position": 0}])
+        with mock.patch.object(
+            pipeline_config, "fetch_pipeline", return_value=configured
+        ):
+            result, gates, fallback_active = pipeline_config.resolve_pipeline_or_fallback(
+                "https://sgp.kanedasec.com.br",
+                "configured-key",
+                "sgp-manager",
+                1,
+            )
+        self.assertFalse(fallback_active)
+        self.assertEqual(gates, ["secrets", "sast", "sca"])
+        self.assertEqual(result["execution_gates"], gates)
+        self.assertEqual(result["policy_mode"], "sgp-bypass-aware")
+
+    def test_invalid_application_never_enters_fallback(self):
+        with self.assertRaises(pipeline_config.PipelineConfigError):
+            pipeline_config.resolve_pipeline_or_fallback(
+                "https://sgp.kanedasec.com.br", "", "INVALID APP", 1
+            )
 
     def test_selected_gate_input_is_strict(self):
         self.assertEqual(

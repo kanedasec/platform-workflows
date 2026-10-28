@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       gates:
-        description: Validated non-empty JSON array of selected gate slugs
+        description: Validated JSON execution order containing every registered gate
         required: true
         type: string
 

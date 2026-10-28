@@ -1,5 +1,5 @@
 name: SGP Manager policy gate
-description: Normalize scanner reports and apply centralized SGP Manager blocking policy.
+description: Apply SGP bypasses when available, otherwise block every finding severity.
 
 inputs:
   manager_url:
@@ -21,7 +21,7 @@ inputs:
     description: Absolute directory for policy decision JSON files
     required: true
   gates:
-    description: Non-empty JSON array of selected gate slugs in policy order
+    description: Non-empty JSON array of gate slugs in execution order
     required: false
     default: '["sast","secrets","sca"]'
 
@@ -31,6 +31,7 @@ runs:
     - name: Apply SGP Manager policies
       shell: bash
       env:
+        SGP_MANAGER_API_KEY: ${{ env.SGP_MANAGER_API_KEY }}
         SGP_MANAGER_URL: ${{ inputs.manager_url }}
         SGP_APPLICATION: ${{ inputs.application }}
         SEMGREP_REPORT: ${{ inputs.semgrep_report }}
@@ -38,44 +39,4 @@ runs:
         TRIVY_REPORT: ${{ inputs.trivy_report }}
         DECISION_DIRECTORY: ${{ inputs.decision_directory }}
         ENABLED_GATES: ${{ inputs.gates }}
-      run: |
-        if [[ -z "${SGP_MANAGER_API_KEY:-}" ]]; then
-          echo "SGP_MANAGER_API_KEY is not configured"
-          exit 2
-        fi
-
-        status=0
-
-        run_gate() {
-          local gate="$1"
-          local scanner="$2"
-          local report="$3"
-          local result=0
-
-          python3 "$GITHUB_ACTION_PATH/security_gate.py" \
-            --manager-url "$SGP_MANAGER_URL" \
-            --application "$SGP_APPLICATION" \
-            --gate "$gate" \
-            --scanner "$scanner" \
-            --report "$report" \
-            --decision-output "$DECISION_DIRECTORY/$gate.json" || result=$?
-
-          if (( result > status )); then
-            status=$result
-          fi
-        }
-
-        selection_file="$RUNNER_TEMP/sgp-selected-gates.txt"
-        python3 "$GITHUB_ACTION_PATH/selected_gates.py" \
-          --gates "$ENABLED_GATES" \
-          --output "$selection_file"
-
-        while IFS= read -r gate; do
-          case "$gate" in
-            sast) run_gate sast semgrep "$SEMGREP_REPORT" ;;
-            secrets) run_gate secrets gitleaks "$GITLEAKS_REPORT" ;;
-            sca) run_gate sca trivy "$TRIVY_REPORT" ;;
-            *) echo "Unsupported gate after validation: $gate"; exit 2 ;;
-          esac
-        done < "$selection_file"
-        exit "$status"
+      run: "$GITHUB_ACTION_PATH/run_policy_gates.sh"

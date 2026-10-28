@@ -183,6 +183,28 @@ def validate_policy(
     return blocking, generated_at
 
 
+def resolve_blocking_policy(
+    manager_url: str,
+    api_key: str,
+    application: str,
+    gate: str,
+    timeout: float,
+) -> tuple[list[str], str | None, str]:
+    """Resolve bypasses, or enforce every severity when SGP is unavailable."""
+    try:
+        if not api_key or len(api_key) > 256:
+            raise GateError("SGP Manager API credential is unavailable")
+        policy = fetch_policy(manager_url, api_key, application, gate, timeout)
+        blocking, generated_at = validate_policy(policy, application, gate)
+        return blocking, generated_at, "sgp-manager"
+    except GateError as error:
+        print(
+            f"warning: {error}; enforcing {gate} with no bypasses",
+            file=sys.stderr,
+        )
+        return list(CANONICAL_SEVERITIES), None, "offline-no-bypass"
+
+
 def write_decision(path: Path, decision: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -196,28 +218,28 @@ def write_decision(path: Path, decision: dict[str, Any]) -> None:
 def main() -> int:
     args = parse_args()
     api_key = os.environ.get("SGP_MANAGER_API_KEY", "")
-    if not api_key:
-        print("error: SGP_MANAGER_API_KEY is not configured", file=sys.stderr)
-        return 2
 
     try:
         findings = extract_findings(args.scanner, load_json(args.report))
-        policy = fetch_policy(
-            args.manager_url,
-            api_key,
-            args.application,
-            args.gate,
-            args.timeout,
-        )
-        blocking_severities, generated_at = validate_policy(
-            policy, args.application, args.gate
-        )
+    except GateError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+
+    blocking_severities, generated_at, policy_source = resolve_blocking_policy(
+        args.manager_url,
+        api_key,
+        args.application,
+        args.gate,
+        args.timeout,
+    )
+    try:
         counts = Counter(findings)
         blocking_findings = [item for item in findings if item in blocking_severities]
         decision = {
             "application": args.application,
             "gate": args.gate,
             "scanner": args.scanner,
+            "policy_source": policy_source,
             "policy_generated_at": generated_at,
             "evaluated_at": datetime.now(UTC).isoformat(),
             "blocking_severities": blocking_severities,
@@ -234,6 +256,7 @@ def main() -> int:
 
     print(f"Application: {args.application}")
     print(f"Gate: {args.gate} ({args.scanner})")
+    print(f"Policy source: {policy_source}")
     print(f"Blocking severities: {','.join(blocking_severities) or 'none'}")
     print(
         "Full-repository findings: "

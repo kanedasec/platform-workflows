@@ -64,6 +64,26 @@ class WorkflowPolicyTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("default: '[\"sast\",\"secrets\",\"sca\"]'", action)
 
+    def test_sgp_outage_uses_all_guardrails_without_bypasses(self):
+        resolver_action = (
+            ROOT / "actions" / "sgp-pipeline-config" / "action.yml"
+        ).read_text(encoding="utf-8")
+        resolver = (
+            ROOT / "actions" / "sgp-pipeline-config" / "pipeline_config.py"
+        ).read_text(encoding="utf-8")
+        policy_action = (
+            ROOT / "actions" / "sgp-policy-gate" / "action.yml"
+        ).read_text(encoding="utf-8")
+        evaluator = (
+            ROOT / "actions" / "sgp-policy-gate" / "security_gate.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('KNOWN_GATES = ("sast", "secrets", "sca")', resolver)
+        self.assertIn('OFFLINE_POLICY_MODE = "offline-no-bypass"', resolver)
+        self.assertIn("list(CANONICAL_SEVERITIES)", evaluator)
+        self.assertNotIn("SGP_MANAGER_API_KEY is not configured", resolver_action)
+        self.assertNotIn("SGP_MANAGER_API_KEY is not configured", policy_action)
+
     def test_gitleaks_scans_the_complete_current_snapshot(self):
         action = (
             ROOT / "actions" / "gitleaks-scan" / "action.yml"
@@ -107,16 +127,14 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertIn("Scan complete dependency snapshot", workflow)
         self.assertIn("security-reports/trivy.json", workflow)
 
-    def test_policy_wrapper_downloads_only_selected_artifacts(self):
+    def test_policy_wrapper_downloads_execution_artifacts(self):
         action = (
             ROOT / "actions" / "sgp-policy-from-artifacts" / "action.yml"
         ).read_text(encoding="utf-8")
         self.assertEqual(action.count("if: contains(fromJSON(inputs.gates)"), 3)
-        self.assertIn("gates: ${{ inputs.gates }}", action)
-        self.assertIn(
-            "sgp-policy-gate@" + "401956bdb15b589" + "4686b875a6233fabda3f81eb0",
-            action,
-        )
+        self.assertIn("ENABLED_GATES: ${{ inputs.gates }}", action)
+        self.assertIn("../sgp-policy-gate/run_policy_gates.sh", action)
+        self.assertNotIn("sgp-policy-gate@", action)
         self.assertIn("security-reports/trivy.json", action)
 
 

@@ -53,9 +53,11 @@ persistent general-purpose runner or direct access to a VPS Docker socket.
 8. Do not install or target self-hosted runners from reusable application CI.
 9. Do not let application repositories weaken central scanner configuration or
    provide their own secret-scan suppressions.
-10. Treat malformed reports, unknown severities, stale policy responses,
-    authentication failures, timeouts, and schema mismatches as gate errors—not
-    authorization to proceed.
+10. Treat malformed scanner reports as gate errors. Unknown severities are
+    critical. If SGP policy discovery or evaluation is unavailable, stale,
+    unauthenticated, or malformed, activate every registered scanner and enforce
+    all canonical severities with no bypasses; never interpret an SGP failure as
+    authorization to omit a guardrail or accept a finding.
 11. Never deploy `latest` or `dev`. Deployment accepts only
     `sha-<40 lowercase hexadecimal characters>`.
 12. Do not broaden `tag:github-deploy`; the Tailnet policy must independently
@@ -89,18 +91,22 @@ repository-local allowlists or inline suppression comments.
 `actions/sgp-policy-gate/` validates scanner JSON, normalizes severities, calls
 SGP Manager over HTTPS, validates the returned application/gate/timestamp, and
 writes an auditable decision artifact. Unknown scanner severity is `critical`.
-Operational errors return a distinct non-zero result and fail closed.
+Missing or malformed scanner evidence returns a distinct operational error.
+Unavailable or invalid SGP policy activates all-severity blocking with no
+bypasses, so a clean report can still pass.
 
-`actions/sgp-policy-from-artifacts/` downloads only the selected scanner
-artifacts and applies the SGP policy independently to each selected gate. The
-application slug comes from the caller repository name. Gate selection is
-strictly revalidated before any report is read.
+`actions/sgp-policy-from-artifacts/` downloads the scanner artifacts in the
+validated execution list and applies policy independently to each gate. The
+normal resolver always includes every registered gate. The application slug
+comes from the caller repository name. Gate selection is strictly revalidated
+before any report is read.
 
 `actions/sgp-pipeline-config/` is the secret-bearing preflight boundary. It
 derives the application slug from the caller repository, calls the fixed SGP
 Manager HTTPS origin without following redirects, and validates a fresh,
-non-empty, unique, contiguous ordered subset of the supported gates. Unknown
-gate implementations fail closed before scanners run.
+non-empty, unique, contiguous ordered subset of the supported gates. The action
+then appends any omitted local gate so every scanner runs. Unknown gate
+implementations fail closed before scanners run.
 
 `actions/tailscale-ssh-deploy/` validates deployment inputs before using
 credentials. It accepts only a Tailscale IPv4 target, restricted Unix user,
@@ -119,9 +125,9 @@ cleanup with `if: always()`, and public post-deployment verification.
   and emits the complete vulnerability report.
 - Scanners produce evidence. SGP Manager determines which normalized
   severities block for the exact application and gate.
-- Pipeline discovery runs before scanners and exposes only the validated gate
-  list to downstream jobs. The SGP credential must remain confined to the
-  preflight and policy jobs.
+- Pipeline discovery runs before scanners and exposes a validated execution
+  list containing every registered gate. The SGP credential must remain
+  confined to the preflight and policy jobs.
 
 Do not add baselines, commit ranges, or report-diff filtering without treating
 that as a reviewed policy change. Existing findings must remain enforceable on

@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 
 import importlib.util
+import json
+import os
+import subprocess
+import sys
+import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest import mock
 
 
 MODULE_PATH = (
@@ -12,6 +18,7 @@ MODULE_PATH = (
     / "sgp-policy-gate"
     / "security_gate.py"
 )
+RUNNER_PATH = MODULE_PATH.with_name("run_policy_gates.sh")
 SPEC = importlib.util.spec_from_file_location("security_gate", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 security_gate = importlib.util.module_from_spec(SPEC)
@@ -77,6 +84,129 @@ class SecurityGateTests(unittest.TestCase):
         }
         with self.assertRaises(security_gate.GateError):
             security_gate.validate_policy(policy, "sgp-manager", "sast")
+
+    def test_unavailable_manager_enforces_every_severity(self):
+        with mock.patch.object(
+            security_gate,
+            "fetch_policy",
+            side_effect=security_gate.GateError("manager unavailable"),
+        ):
+            blocking, generated_at, source = security_gate.resolve_blocking_policy(
+                "https://sgp.kanedasec.com.br",
+                "configured-key",
+                "second-brain",
+                "sast",
+                1,
+            )
+        self.assertEqual(blocking, ["low", "medium", "high", "critical"])
+        self.assertIsNone(generated_at)
+        self.assertEqual(source, "offline-no-bypass")
+
+    def test_missing_manager_credential_enforces_every_severity(self):
+        with mock.patch.object(security_gate, "fetch_policy") as fetch:
+            blocking, _, source = security_gate.resolve_blocking_policy(
+                "https://sgp.kanedasec.com.br", "", "second-brain", "secrets", 1
+            )
+        fetch.assert_not_called()
+        self.assertEqual(blocking, list(security_gate.CANONICAL_SEVERITIES))
+        self.assertEqual(source, "offline-no-bypass")
+
+    def test_offline_cli_passes_clean_report_and_blocks_low_finding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = root / "semgrep.json"
+            decision = root / "decision.json"
+            arguments = [
+                "security_gate.py",
+                "--manager-url",
+                "https://sgp.kanedasec.com.br",
+                "--application",
+                "second-brain",
+                "--gate",
+                "sast",
+                "--scanner",
+                "semgrep",
+                "--report",
+                str(report),
+                "--decision-output",
+                str(decision),
+            ]
+
+            report.write_text('{"results": []}', encoding="utf-8")
+            with mock.patch.object(sys, "argv", arguments), mock.patch.dict(
+                os.environ, {}, clear=True
+            ):
+                self.assertEqual(security_gate.main(), 0)
+            clean = json.loads(decision.read_text(encoding="utf-8"))
+            self.assertEqual(clean["decision"], "PASS")
+            self.assertEqual(clean["policy_source"], "offline-no-bypass")
+
+            report.write_text(
+                '{"results": [{"extra": {"severity": "INFO"}}]}',
+                encoding="utf-8",
+            )
+            with mock.patch.object(sys, "argv", arguments), mock.patch.dict(
+                os.environ, {}, clear=True
+            ):
+                self.assertEqual(security_gate.main(), 1)
+            blocked = json.loads(decision.read_text(encoding="utf-8"))
+            self.assertEqual(blocked["blocking_findings"], 1)
+            self.assertEqual(blocked["decision"], "BLOCK")
+
+    def test_offline_runner_executes_all_gates_and_aggregates_decisions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "reports"
+            decisions = root / "decisions"
+            reports.mkdir()
+            semgrep = reports / "semgrep.json"
+            gitleaks = reports / "gitleaks.json"
+            trivy = reports / "trivy.json"
+            semgrep.write_text('{"results": []}', encoding="utf-8")
+            gitleaks.write_text("[]", encoding="utf-8")
+            trivy.write_text('{"Results": []}', encoding="utf-8")
+            environment = {
+                "PATH": os.environ["PATH"],
+                "SGP_MANAGER_URL": "https://sgp.kanedasec.com.br",
+                "SGP_APPLICATION": "second-brain",
+                "SEMGREP_REPORT": str(semgrep),
+                "GITLEAKS_REPORT": str(gitleaks),
+                "TRIVY_REPORT": str(trivy),
+                "DECISION_DIRECTORY": str(decisions),
+                "ENABLED_GATES": '["sast","secrets","sca"]',
+                "RUNNER_TEMP": str(root),
+            }
+
+            clean = subprocess.run(
+                [str(RUNNER_PATH)],
+                check=False,
+                capture_output=True,
+                env=environment,
+                text=True,
+            )
+            self.assertEqual(clean.returncode, 0, clean.stderr)
+            self.assertEqual(
+                {path.name for path in decisions.glob("*.json")},
+                {"sast.json", "secrets.json", "sca.json"},
+            )
+
+            semgrep.write_text(
+                '{"results": [{"extra": {"severity": "INFO"}}]}',
+                encoding="utf-8",
+            )
+            blocked = subprocess.run(
+                [str(RUNNER_PATH)],
+                check=False,
+                capture_output=True,
+                env=environment,
+                text=True,
+            )
+            self.assertEqual(blocked.returncode, 1, blocked.stderr)
+            decision = json.loads(
+                (decisions / "sast.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(decision["policy_source"], "offline-no-bypass")
+            self.assertEqual(decision["decision"], "BLOCK")
 
     def test_manager_url_must_be_https_without_embedded_credentials(self):
         expected = "https://sgp.kanedasec.com.br/api/v1/policies/evaluate-enforcement"
