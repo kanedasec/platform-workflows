@@ -1,5 +1,5 @@
 name: SGP Manager policy gate
-description: Normalize scanner reports and apply centralized SGP Manager blocking policy.
+description: Apply SGP bypasses when available, otherwise block every finding severity.
 
 inputs:
   manager_url:
@@ -39,11 +39,6 @@ runs:
         DECISION_DIRECTORY: ${{ inputs.decision_directory }}
         ENABLED_GATES: ${{ inputs.gates }}
       run: |
-        if [[ -z "${SGP_MANAGER_API_KEY:-}" ]]; then
-          echo "SGP_MANAGER_API_KEY is not configured"
-          exit 2
-        fi
-
         status=0
 
         run_gate() {

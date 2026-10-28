@@ -53,9 +53,11 @@ persistent general-purpose runner or direct access to a VPS Docker socket.
 8. Do not install or target self-hosted runners from reusable application CI.
 9. Do not let application repositories weaken central scanner configuration or
    provide their own secret-scan suppressions.
-10. Treat malformed reports, unknown severities, stale policy responses,
-    authentication failures, timeouts, and schema mismatches as gate errors—not
-    authorization to proceed.
+10. Treat malformed scanner reports as gate errors. Unknown severities are
+    critical. If SGP policy discovery or evaluation is unavailable, stale,
+    unauthenticated, or malformed, activate every registered scanner and enforce
+    all canonical severities with no bypasses; never interpret an SGP failure as
+    authorization to omit a guardrail or accept a finding.
 11. Never deploy `latest` or `dev`. Deployment accepts only
     `sha-<40 lowercase hexadecimal characters>`.
 12. Do not broaden `tag:github-deploy`; the Tailnet policy must independently

@@ -1,5 +1,5 @@
 name: SGP Manager policy from scanner artifacts
-description: Download standardized scanner reports and apply SGP Manager policies.
+description: Download scanner reports and apply online bypasses or strict offline no-bypass policy.
 
 inputs:
   gates:

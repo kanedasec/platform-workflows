@@ -18,6 +18,7 @@ from typing import Any
 
 KNOWN_GATES = ("sast", "secrets", "sca")
 APPLICATION_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+OFFLINE_POLICY_MODE = "offline-no-bypass"
 
 
 class PipelineConfigError(ValueError):
@@ -100,8 +101,7 @@ def validate_generated_at(value: Any) -> str:
 
 
 def validate_pipeline(result: dict[str, Any], application: str) -> list[str]:
-    if not APPLICATION_PATTERN.fullmatch(application) or len(application) > 100:
-        raise PipelineConfigError("invalid application slug")
+    validate_application(application)
     if result.get("application") != application:
         raise PipelineConfigError("SGP Manager returned a different application")
     validate_generated_at(result.get("generated_at"))
@@ -133,6 +133,63 @@ def validate_pipeline(result: dict[str, Any], application: str) -> list[str]:
     return gates
 
 
+def validate_application(application: str) -> None:
+    if not APPLICATION_PATTERN.fullmatch(application) or len(application) > 100:
+        raise PipelineConfigError("invalid application slug")
+
+
+def complete_execution_gates(configured_gates: list[str]) -> list[str]:
+    """Preserve SGP ordering while ensuring every local guardrail executes."""
+    return [
+        *configured_gates,
+        *(gate for gate in KNOWN_GATES if gate not in configured_gates),
+    ]
+
+
+def offline_pipeline(application: str) -> dict[str, Any]:
+    """Return the immutable strict fallback: every known gate, no bypass source."""
+    validate_application(application)
+    return {
+        "application": application,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "policy_mode": OFFLINE_POLICY_MODE,
+        "execution_gates": list(KNOWN_GATES),
+        "gates": [
+            {"gate": gate, "position": position}
+            for position, gate in enumerate(KNOWN_GATES)
+        ],
+    }
+
+
+def resolve_pipeline_or_fallback(
+    manager_url: str,
+    api_key: str,
+    application: str,
+    timeout: float,
+) -> tuple[dict[str, Any], list[str], bool]:
+    """Use SGP when available; otherwise activate every guardrail with no bypasses."""
+    validate_application(application)
+    try:
+        if not api_key or len(api_key) > 256:
+            raise PipelineConfigError("SGP Manager API credential is unavailable")
+        result = fetch_pipeline(manager_url, api_key, application, timeout)
+        configured_gates = validate_pipeline(result, application)
+        execution_gates = complete_execution_gates(configured_gates)
+        evidence = {
+            **result,
+            "policy_mode": "sgp-bypass-aware",
+            "execution_gates": execution_gates,
+        }
+        return evidence, execution_gates, False
+    except PipelineConfigError as error:
+        print(
+            f"warning: {error}; activating all guardrails in no-bypass mode",
+            file=sys.stderr,
+        )
+        result = offline_pipeline(application)
+        return result, list(KNOWN_GATES), True
+
+
 def write_response(path: Path, result: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -146,18 +203,20 @@ def write_response(path: Path, result: dict[str, Any]) -> None:
 def main() -> int:
     args = parse_args()
     api_key = os.environ.get("SGP_MANAGER_API_KEY", "")
-    if not api_key or len(api_key) > 256:
-        print("error: SGP_MANAGER_API_KEY is missing or invalid", file=sys.stderr)
-        return 2
     try:
-        result = fetch_pipeline(
+        result, gates, fallback_active = resolve_pipeline_or_fallback(
             args.manager_url, api_key, args.application, args.timeout
         )
-        gates = validate_pipeline(result, args.application)
         write_response(args.response_output, result)
     except PipelineConfigError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
+    if fallback_active:
+        print(
+            "warning: SGP Manager bypass resolution unavailable; "
+            "all registered gates will enforce every severity",
+            file=sys.stderr,
+        )
     print(json.dumps(gates, separators=(",", ":")))
     return 0
 

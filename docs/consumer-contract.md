@@ -132,3 +132,12 @@ branch rules remain configured in the caller repository.
 Caller-controlled `.gitleaksignore`, `.trivyignore`, `gitleaks:allow`, and
 `nosemgrep` suppressions do not weaken these scans. Exceptions should be added
 through a reviewed central policy process.
+
+When SGP Manager is unreachable or cannot return a valid fresh response, the
+pinned preflight action succeeds with an auditable `offline-no-bypass` result,
+selects `sast`, `secrets`, and `sca`, and the pinned policy action blocks every
+normalized severity. Online discovery also appends any locally registered tool
+omitted by SGP so strict evidence is already available if evaluation later goes
+offline. The prerequisite step above still fails for actual
+scanner or artifact failures. Do not add caller-side `continue-on-error` or
+alternate policy logic.

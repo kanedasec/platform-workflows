@@ -10,19 +10,23 @@ This repository centralizes full-repository scanner configuration and SGP
 Manager policy enforcement. Application repositories retain only small caller
 workflows and application-specific build metadata.
 
-SGP Manager supplies each application's assigned ordered security pipeline. A
-fail-closed preflight action validates that selection before any scanner job is
-eligible to run; scanner jobs never receive the SGP API credential.
+SGP Manager supplies each application's assigned ordered security pipeline and
+active bypasses. When it is unavailable, the platform runs every registered
+scanner and enforces low, medium, high, and critical findings with no bypasses.
+Scanner jobs never receive the SGP API credential.
 
 The current executable gate registry maps `sast` to Semgrep, `secrets` to
-Gitleaks, and `sca` to Trivy. Selected scanners run in parallel against the
-complete current pull-request snapshot and only their artifacts are evaluated.
+Gitleaks, and `sca` to Trivy. Every registered scanner runs in parallel against
+the complete current pull-request snapshot. SGP policy controls enforcement,
+not evidence collection.
 
 ## Trust model
 
 - Application workflows call released revisions by a full Git commit SHA.
 - Third-party GitHub Actions are pinned to full commit SHAs.
 - Scanner steps produce evidence; SGP Manager decides which severities block.
+- An SGP outage cannot weaken enforcement: every registered scanner runs and
+  every severity blocks until bypass resolution returns.
 - Secret-scan exceptions are centrally reviewed; caller-controlled
   `.gitleaksignore` files and inline `gitleaks:allow` comments are ignored.
 - The SGP API key remains in each caller repository's protected

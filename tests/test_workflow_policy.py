@@ -64,6 +64,26 @@ class WorkflowPolicyTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("default: '[\"sast\",\"secrets\",\"sca\"]'", action)
 
+    def test_sgp_outage_uses_all_guardrails_without_bypasses(self):
+        resolver_action = (
+            ROOT / "actions" / "sgp-pipeline-config" / "action.yml"
+        ).read_text(encoding="utf-8")
+        resolver = (
+            ROOT / "actions" / "sgp-pipeline-config" / "pipeline_config.py"
+        ).read_text(encoding="utf-8")
+        policy_action = (
+            ROOT / "actions" / "sgp-policy-gate" / "action.yml"
+        ).read_text(encoding="utf-8")
+        evaluator = (
+            ROOT / "actions" / "sgp-policy-gate" / "security_gate.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('KNOWN_GATES = ("sast", "secrets", "sca")', resolver)
+        self.assertIn('OFFLINE_POLICY_MODE = "offline-no-bypass"', resolver)
+        self.assertIn("list(CANONICAL_SEVERITIES)", evaluator)
+        self.assertNotIn("SGP_MANAGER_API_KEY is not configured", resolver_action)
+        self.assertNotIn("SGP_MANAGER_API_KEY is not configured", policy_action)
+
     def test_gitleaks_scans_the_complete_current_snapshot(self):
         action = (
             ROOT / "actions" / "gitleaks-scan" / "action.yml"
